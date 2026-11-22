@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Кликер</title>
+<style>
+  :root {
+    --card: rgba(58, 58, 60, 0.55);
+    --text: #f5f5f7;
+    --secondary: #8e8e93;
+    --orange: #ff9f0a;
+    --green: #30d158;
+    --blue: #0a84ff;
+  }
+
+  * { box-sizing: border-box; user-select: none; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    gap: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 30% 20%, #2c2c2e 0%, #1c1c1e 60%, #000 100%);
+    color: var(--text);
+  }
+
+  h1 {
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    color: var(--secondary);
+    margin: 0;
+  }
+
+  .score-card {
+    background: var(--card);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 40px;
+    padding: 28px 48px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+
+  .score {
+    font-size: 64px;
+    font-weight: 200;
+    font-variant-numeric: tabular-nums;
+    color: var(--orange);
+    transition: transform 0.1s;
+  }
+
+  .score.bump { transform: scale(1.08); }
+
+  .per-second {
+    font-size: 14px;
+    color: var(--secondary);
+    margin-top: 4px;
+  }
+
+  /* Большая кнопка-кликер */
+  .click-btn {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 56px;
+    background: radial-gradient(circle at 35% 30%, #ffb340, #ff9f0a 60%, #d97b00);
+    box-shadow: 0 12px 40px rgba(255, 159, 10, 0.35), inset 0 -6px 16px rgba(0,0,0,0.25);
+    transition: transform 0.08s, box-shadow 0.08s;
+    position: relative;
+  }
+
+  .click-btn:active {
+    transform: scale(0.92);
+    box-shadow: 0 6px 20px rgba(255, 159, 10, 0.25), inset 0 -3px 10px rgba(0,0,0,0.3);
+  }
+
+  /* Всплывающие «+1» */
+  .pop {
+    position: fixed;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--orange);
+    pointer-events: none;
+    animation: rise 0.9s ease-out forwards;
+  }
+
+  @keyframes rise {
+    0%   { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-70px); opacity: 0; }
+  }
+
+  /* Магазин */
+  .shop {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .shop h2 {
+    font-size: 16px;
+    color: var(--secondary);
+    margin: 0 0 4px 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .upgrade {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--card);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.2s;
+  }
+
+  .upgrade:active { transform: scale(0.97); }
+  .upgrade.affordable { border-color: rgba(255, 159, 10, 0.5); }
+
+  .upgrade .icon { font-size: 30px; }
+
+  .upgrade .info { flex: 1; text-align: left; }
+  .upgrade .name { font-weight: 600; font-size: 16px; }
+  .upgrade .desc { font-size: 13px; color: var(--secondary); margin-top: 2px; }
+  .upgrade .lvl   { font-size: 13px; color: var(--blue); margin-top: 2px; }
+
+  .upgrade .price {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--orange);
+    white-space: nowrap;
+  }
+
+  .upgrade.disabled .price { color: #636366; }
+  .upgrade.disabled { opacity: 0.55; cursor: default; }
+
+  .reset {
+    margin-top: 8px;
+    background: none;
+    border: none;
+    color: #ff453a;
+    font-size: 13px;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+
+  <h1>КЛИКЕР</h1>
+
+  <div class="score-card">
+    <div class="score" id="score">0</div>
+    <div class="per-second" id="perSec">0 очков в секунду</div>
+  </div>
+
+  <button class="click-btn" id="clickBtn">🍪</button>
+
+  <div class="shop">
+    <h2>Магазин улучшений</h2>
+
+    <div class="upgrade" id="upClick">
+      <div class="icon">💪</div>
+      <div class="info">
+        <div class="name">Сила клика</div>
+        <div class="desc">+1 очко за каждый клик</div>
+        <div class="lvl" id="lvlClick">Уровень 1</div>
+      </div>
+      <div class="price" id="priceClick">10</div>
+    </div>
+
+    <div class="upgrade" id="upAuto">
+      <div class="icon">⚙️</div>
+      <div class="info">
+        <div class="name">Автоклик</div>
+        <div class="desc">+1 очко в секунду</div>
+        <div class="lvl" id="lvlAuto">Уровень 0</div>
+      </div>
+      <div class="price" id="priceAuto">25</div>
+    </div>
+
+    <div class="upgrade" id="upCrit">
+      <div class="icon">✨</div>
+      <div class="info">
+        <div class="name">Золотое печенье</div>
+        <div class="desc">Шанс 10% получить ×10 очков</div>
+        <div class="lvl" id="lvlCrit">Уровень 0</div>
+      </div>
+      <div class="price" id="priceCrit">100</div>
+    </div>
+  </div>
+
+  <button class="reset" onclick="resetGame()">Начать заново</button>
+
+<script>
+  // ---------- Состояние игры ----------
+  let score = 0;
+  let clickPower = 1;   // очков за клик
+  let autoLevel = 0;    // уровень автоклика
+  let critLevel = 0;    // уровень золотого печенья
+
+  // Стоимость растёт с каждым уровнем: базовая цена × 1.5^уровень
+  const cost = (base, level) => Math.ceil(base * Math.pow(1.5, level));
+
+  const el = id => document.getElementById(id);
+
+  // ---------- Сохранение / загрузка ----------
+  function save() {
+    localStorage.setItem('clickerSave', JSON.stringify({
+      score, clickPower, autoLevel, critLevel
+    }));
+  }
+
+  function load() {
+    const s = localStorage.getItem('clickerSave');
+    if (!s) return;
+    try {
+      const d = JSON.parse(s);
+      score = d.score || 0;
+      clickPower = d.clickPower || 1;
+      autoLevel = d.autoLevel || 0;
+      critLevel = d.critLevel || 0;
+    } catch (_) {}
+  }
+
+  function resetGame() {
+    if (!confirm('Точно начать с нуля? Весь прогресс пропадёт.')) return;
+    score = 0; clickPower = 1; autoLevel = 0; critLevel = 0;
+    save();
+    render();
+  }
+
+  // ---------- Отрисовка ----------
+  function render() {
+    el('score').textContent = Math.floor(score).toLocaleString('ru-RU');
+    el('perSec').textContent = autoLevel + ' очков в секунду';
+
+    el('lvlClick').textContent = 'Уровень ' + clickPower;
+    el('priceClick').textContent = cost(10, clickPower - 1).toLocaleString('ru-RU');
+
+    el('lvlAuto').textContent = 'Уровень ' + autoLevel;
+    el('priceAuto').textContent = cost(25, autoLevel).toLocaleString('ru-RU');
+
+    el('lvlCrit').textContent = 'Уровень ' + critLevel + ' (шанс ' + (critLevel * 10) + '%)';
+    el('priceCrit').textContent = cost(100, critLevel).toLocaleString('ru-RU');
+
+    // Подсветка доступных покупок
+    el('upClick').classList.toggle('affordable', score >= cost(10, clickPower - 1));
+    el('upAuto').classList.toggle('affordable', score >= cost(25, autoLevel));
+    el('upCrit').classList.toggle('affordable', score >= cost(100, critLevel));
+
+    el('upClick').classList.toggle('disabled', score < cost(10, clickPower - 1));
+    el('upAuto').classList.toggle('disabled', score < cost(25, autoLevel));
+    el('upCrit').classList.toggle('disabled', score < cost(100, critLevel));
+  }
+
+  // ---------- Клик по печенью ----------
+  el('clickBtn').addEventListener('click', e => {
+    let gain = clickPower;
+
+    // Золотое печенье: случайный шанс на крупный выигрыш
+    if (critLevel > 0 && Math.random() < critLevel * 0.1) {
+      gain *= 10;
+      el('score').textContent = '+' + gain;
+    }
+
+    score += gain;
+    popText('+' + gain, e.clientX, e.clientY);
+
+    // Подпрыгивание счёта
+    const s = el('score');
+    s.classList.add('bump');
+    setTimeout(() => s.classList.remove('bump'), 100);
+
+    render();
+    save();
+  });
+
+  // ---------- Всплывающий текст «+N» ----------
+  function popText(text, x, y) {
+    const p = document.createElement('div');
+    p.className = 'pop';
+    p.textContent = text;
+    p.style.left = (x - 10) + 'px';
+    p.style.top = (y - 40) + 'px';
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 900);
+  }
+
+  // ---------- Покупка улучшений ----------
+  el('upClick').addEventListener('click', () => {
+    const price = cost(10, clickPower - 1);
+    if (score < price) return;
+    score -= price;
+    clickPower++;
+    render();
+    save();
+  });
+
+  el('upAuto').addEventListener('click', () => {
+    const price = cost(25, autoLevel);
+    if (score < price) return;
+    score -= price;
+    autoLevel++;
+    render();
+    save();
+  });
+
+  el('upCrit').addEventListener('click', () => {
+    if (critLevel >= 5) return; // максимум 50% шанса
+    const price = cost(100, critLevel);
+    if (score < price) return;
+    score -= price;
+    critLevel++;
+    render();
+    save();
+  });
+
+  // ---------- Автоклик: очки капают сами ----------
+  setInterval(() => {
+    if (autoLevel > 0) {
+      score += autoLevel;
+      render();
+      save();
+    }
+  }, 1000);
+
+  // Автосохранение на всякий случай
+  setInterval(save, 5000);
+
+  // ---------- Старт ----------
+  load();
+  render();
+</script>
+</body>
+</html>
