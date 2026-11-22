@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Таймер — Саня</title>
+<style>
+  :root {
+    --bg: #1c1c1e;
+    --card: rgba(58, 58, 60, 0.55);
+    --text: #f5f5f7;
+    --secondary: #8e8e93;
+    --orange: #ff9f0a;
+    --green: #30d158;
+    --red: #ff453a;
+    --blue: #0a84ff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 30% 20%, #2c2c2e 0%, #1c1c1e 60%, #000 100%);
+    color: var(--text);
+    padding: 24px;
+  }
+
+  h1 {
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    color: var(--secondary);
+    margin: 0;
+  }
+
+  .card {
+    background: var(--card);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 40px;
+    padding: 40px 48px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    text-align: center;
+  }
+
+  .digits {
+    font-size: 88px;
+    font-weight: 200;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    transition: color 0.3s;
+    color: var(--text);
+  }
+
+  .digits.running { color: var(--orange); }
+  .digits.paused  { color: var(--blue); }
+  .digits.finish  { color: var(--red); animation: pulse 0.8s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status { font-size: 15px; color: var(--secondary); margin-top: 8px; min-height: 20px; }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    padding: 14px 22px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.12);
+    transition: transform 0.15s, background 0.2s;
+  }
+
+  button:active { transform: scale(0.95); }
+  button.primary { background: rgba(255, 159, 10, 0.9); color: #1c1c1e; }
+  button.danger  { background: rgba(255, 69, 58, 0.85); }
+
+  .mic {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    margin-top: 8px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .mic.listening {
+    background: rgba(48, 209, 88, 0.9);
+    color: #fff;
+  }
+
+  .mic.listening::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(48, 209, 88, 0.6);
+    animation: ring 1.5s infinite;
+  }
+
+  @keyframes ring {
+    0%   { transform: scale(0.9); opacity: 0.8; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--secondary);
+    max-width: 360px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .hint b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+  <h1>ТАЙМЕР</h1>
+
+  <div class="card">
+    <div class="digits" id="digits">00:00</div>
+    <div class="status" id="status">Скажите «Саня» + команду</div>
+
+    <div class="controls">
+      <button onclick="addTime(60)">+1 мин</button>
+      <button onclick="addTime(300)">+5 мин</button>
+      <button class="primary" onclick="toggleStart()">Старт / Пауза</button>
+      <button class="danger" onclick="resetTimer()">Сброс</button>
+    </div>
+  </div>
+
+  <button class="mic" id="micBtn" onclick="toggleMic()">🎙️</button>
+
+  <p class="hint">
+    Голосовые команды (сначала скажите <b>«Саня»</b>):<br>
+    «Саня, таймер на 5 минут» — запустить таймер<br>
+    «Саня, пауза» / «Саня, продолжить» — пауза и продолжить<br>
+    «Саня, сброс» — сбросить
+  </p>
+
+<script>
+  let total = 0;
+  let remaining = 0;
+  let running = false;
+  let intervalId = null;
+  let listening = false;
+  let armed = false;
+  let disarmTimer = null;
+
+  const digits = document.getElementById('digits');
+  const status = document.getElementById('status');
+  const micBtn = document.getElementById('micBtn');
+
+  const fmt = s =>
+    String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+
+  function render(state = '') {
+    digits.textContent = fmt(remaining);
+    digits.className = 'digits ' + state;
+  }
+
+  function addTime(sec) {
+    total += sec;
+    remaining += sec;
+    render(running ? 'running' : '');
+  }
+
+  function toggleStart() {
+    if (remaining <= 0 && !running) return;
+    running = !running;
+    if (running) {
+      status.textContent = 'Идёт отсчёт';
+      render('running');
+      intervalId = setInterval(tick, 1000);
+    } else {
+      clearInterval(intervalId);
+      status.textContent = 'Пауза';
+      render('paused');
+    }
+  }
+
+  function tick() {
+    remaining--;
+    if (remaining <= 0) {
+      remaining = 0;
+      clearInterval(intervalId);
+      running = false;
+      render('finish');
+      status.textContent = 'Время вышло!';
+      say('Саня, время вышло');
+      return;
+    }
+    render('running');
+  }
+
+  function resetTimer() {
+    clearInterval(intervalId);
+    running = false;
+    total = 0;
+    remaining = 0;
+    render();
+    status.textContent = 'Скажите «Саня» + команду';
+  }
+
+  /* ---------- Голос ---------- */
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+
+  const words = {
+    'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,
+    'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'пятнадцать':15,
+    'двадцать':20,'тридцать':30,'полчаса':30
+  };
+
+  function parseCommand(text) {
+    text = text.toLowerCase().replace(/ё/g, 'е');
+    const i = text.indexOf('саня');
+    if (i === -1) return null;
+    const cmd = text.slice(i).replace(/[^\sa-zа-я0-9]/g, ' ');
+
+    if (/сброс|стоп|отмена/.test(cmd)) return { action: 'reset' };
+    if (/пауза|останови|подожди/.test(cmd)) return { action: 'pause' };
+    if (/продолж|старт|запуск|поехали/.test(cmd)) return { action: 'resume' };
+
+    const minMatch = cmd.match(/(\d+)\s*(мин|мину)/);
+    const secMatch = cmd.match(/(\d+)\s*(сек)/);
+    let min = minMatch ? +minMatch[1] : 0;
+    let sec = secMatch ? +secMatch[1] : 0;
+
+    if (!min) for (const w in words) {
+      if (cmd.includes(w) && cmd.includes('мин')) { min = words[w]; break; }
+    }
+
+    if (min || sec) return { action: 'set', min, sec };
+
+    return null; // не поняли — молчим
+  }
+
+  function execute(command) {
+    switch (command.action) {
+      case 'reset':
+        resetTimer();
+        say('Сбросила');
+        break;
+
+      case 'pause':
+        if (running) toggleStart();
+        say('На паузе');
+        break;
+
+      case 'resume':
+        if (!running && remaining > 0) toggleStart();
+        say('Продолжаю');
+        break;
+
+      case 'set': {
+        clearInterval(intervalId);
+        running = true;
+        total = remaining = command.min * 60 + command.sec;
+        render('running');
+        status.textContent = 'Идёт отсчёт';
+        intervalId = setInterval(tick, 1000);
+        say('Таймер на ' + (command.min ? command.min + ' минут' : command.sec + ' секунд'));
+        break;
+      }
+    }
+  }
+
+  function say(text) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ru-RU';
+    speechSynthesis.speak(u);
+  }
+
+  function disarm() {
+    armed = false;
+    clearTimeout(disarmTimer);
+    micBtn.classList.remove('listening');
+    if (!running) status.textContent = 'Скажите «Саня» + команду';
+  }
+
+  function toggleMic() {
+    if (!SpeechRecognition) {
+      status.textContent = 'Голос не поддерживается в этом браузере';
+      return;
+    }
+    if (listening) { recognition.stop(); return; }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = e => {
+      const phrase = Array.from(e.results)
+        .map(r => r[0].transcript).join(' ').toLowerCase();
+
+      const hasName = /сан[яюей]/.test(phrase) || phrase.includes('саша');
+
+      if (!armed) {
+        if (hasName) {
+          armed = true;
+          micBtn.classList.add('listening');
+          status.textContent = 'Слушаю команду…';
+          clearTimeout(disarmTimer);
+          disarmTimer = setTimeout(disarm, 6000);
+        }
+        return; // без «Сани» — тишина
+      }
+
+      const command = parseCommand(hasName ? phrase : 'саня ' + phrase);
+      if (command) {
+        disarm();
+        execute(command);
+      }
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      if (micBtn.dataset.keep === '1') {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+
+    recognition.onerror = () => {
+      listening = false;
+      status.textContent = 'Ошибка микрофона. Проверьте доступ.';
+    };
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.remove('listening');
+    };
+
+    micBtn.dataset.keep = '1';
+    try { recognition.start(); } catch (_) {}
+  }
+</script>
+</body>
+</html>
